@@ -1,9 +1,10 @@
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from os import listdir
 import os
 from os.path import isdir,join,splitext,basename,exists
-
+from torch.utils.tensorboard import SummaryWriter
+from torchvision import transforms
 IMG_EXTENSIONS = (
     ".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"
 )
@@ -14,6 +15,21 @@ def _pil_loader(path):
 
 def _is_image_file(filename,extensions):
     return filename.lower().endswith(tuple(ext.lower() for ext in extensions))
+
+def _my_transforms(image_size=224, is_train=True):
+    if is_train:
+        return transforms.Compose([
+            transforms.Resize((image_size, image_size)),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+    else:
+        return transforms.Compose([
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
 
 def _find_classes(directory):
     """
@@ -45,7 +61,9 @@ class ClassDirectoryDataset(Dataset):
     - 使用给定 `transform` 和 `target_transform`
     """
 
-    def __init__(self, root, extensions, loader=_pil_loader):
+    def __init__(self, root, extensions, loader=_pil_loader,
+                 transform_builder=_my_transforms, target_transform=None,
+                 is_train=True):
         self.root = root
         self.extensions = tuple(ext.lower() for ext in extensions)
         self.loader = loader
@@ -53,6 +71,8 @@ class ClassDirectoryDataset(Dataset):
         self.classes = _find_classes(self.root)
         self.class_to_idx = {class_name: idx for idx, class_name in enumerate(self.classes)}
         self.samples = self._make_dataset(self.root)
+        self.transform = transform_builder(is_train=is_train)
+        self.target_transform = target_transform
 
     def _make_dataset(self, directory):
         instances = []
@@ -79,10 +99,15 @@ class ClassDirectoryDataset(Dataset):
         """
         path, class_idx = self.samples[index]
         img_rgb = self.loader(path)
+        if self.transform is not None:
+            img_rgb = self.transform(img_rgb)
+        if self.target_transform is not None:
+            class_idx = self.target_transform(class_idx)
         return img_rgb, class_idx
 
 if __name__ == "__main__":
     myClassDirectoryDataset = ClassDirectoryDataset("../data/hymenoptera_data/train", ["jpg"])
-    img0, lable = myClassDirectoryDataset[5]
-    img0.show()
-    print(myClassDirectoryDataset.classes[lable])
+    img0, label = myClassDirectoryDataset[5]
+    # img0.show()
+    print(img0.shape)
+    print(myClassDirectoryDataset.classes[label])
