@@ -5,6 +5,8 @@ from src.dataset import ClassDirectoryDataset
 from torch.optim import Adam
 from torch.utils.data import DataLoader,random_split
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch import autocast, GradScaler
+from torch.amp.autocast_mode import is_autocast_available
 
 from tqdm import tqdm
 from tqdm import trange
@@ -63,9 +65,15 @@ model = AntBeeClassifier(dropout_rate=0.2).to(device) # 1. build a model
 criterion = torch.nn.CrossEntropyLoss() # 2. define the loss
 optimizer = Adam(model.parameters(), lr=learning_rate , weight_decay=1e-4) # 3. do the optimize work, add weight decay to prevent overfitting
 scheduler = ReduceLROnPlateau(optimizer, verbose=True)
+scaler = GradScaler()  # Used to scale loss to prevent underflow
 
 if __name__ == '__main__':
     print(f"Using device: {device}")
+    
+    if is_autocast_available(str(device)):
+        print("Autocast available")
+    else:
+        print("Autocast not available")
     
     # ==== Training + Validation loop ====
     for epoch in range(num_epochs):
@@ -78,11 +86,21 @@ if __name__ == '__main__':
             inputs, labels = inputs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
             optimizer.zero_grad()
 
-            outputs = model(inputs)
-            loss = criterion(outputs, labels) # Calculate cross entropy loss
+            # Enables autocasting for the forward pass (model + loss)
+            with autocast(device_type=str(device)):
+                outputs = model(inputs)
+                loss = criterion(outputs, labels) # Calculate cross entropy loss
 
-            loss.backward()
-            optimizer.step()
+            # Scales the loss, and calls backward() to create scaled gradients
+            scaler.scale(loss).backward()
+
+            # scaler.step() first unscales the gradients of the optimizer's assigned params.
+            # If these gradients do not contain infs or NaNs, optimizer.step() is then called,
+            # otherwise, optimizer.step() is skipped.
+            scaler.step(optimizer)
+
+            # Updates the scale for next iteration
+            scaler.update()
 
             train_loss += loss.item()
             predicted = outputs.argmax(1)
