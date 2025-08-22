@@ -4,22 +4,32 @@ from src.model import AntBeeClassifier
 from src.dataset import ClassDirectoryDataset
 from torch.optim import Adam
 from torch.utils.data import DataLoader,random_split
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from tqdm import tqdm
 from tqdm import trange
 import numpy as np
 import os
+from datetime import datetime
+
+from torch.utils.tensorboard import SummaryWriter
 
 # ==== Training Configuration ====
-checkpoints_dir = "checkpoints"
+current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+experiment_name = f"exp-{current_time}"
+
+checkpoints_dir = f"checkpoints/{experiment_name}"
 os.makedirs(checkpoints_dir, exist_ok=True)
+
+writer = SummaryWriter(f"runs/{experiment_name}")
+
 # ==== Parameter Settings ====
 num_epochs = 100
 batch_size = 32
 num_workers = 2
 learning_rate = 1e-3
 
-patience = 10
+patience = 30
 best_val_loss = np.inf
 epochs_without_improvement = 0 # Record how many epochs val_loss hasn't decreased
 
@@ -33,7 +43,6 @@ val_size = len(dataset) - train_size
 train_set, val_set = random_split(dataset, [train_size, val_size],
                                   generator=torch.Generator().manual_seed(42)
 )
-
 
 train_loader = DataLoader(train_set,
                           batch_size=batch_size,
@@ -53,10 +62,11 @@ model = AntBeeClassifier(dropout_rate=0.2).to(device) # 1. build a model
 # ==== Loss Function & Optimizer ====
 criterion = torch.nn.CrossEntropyLoss() # 2. define the loss
 optimizer = Adam(model.parameters(), lr=learning_rate , weight_decay=1e-4) # 3. do the optimize work, add weight decay to prevent overfitting
-
+scheduler = ReduceLROnPlateau(optimizer, verbose=True)
 
 if __name__ == '__main__':
     print(f"Using device: {device}")
+    
     # ==== Training + Validation loop ====
     for epoch in range(num_epochs):
         # --- Training ---
@@ -102,6 +112,8 @@ if __name__ == '__main__':
         avg_val_loss = val_loss / len(val_loader)
         val_acc = correct / total
 
+        scheduler.step(avg_val_loss)
+
         # --- Model Saving ---
         # Save latest model
         checkpoint = {
@@ -124,12 +136,18 @@ if __name__ == '__main__':
         else:
             epochs_without_improvement += 1
 
+        # --- Log ---
+        print(f"Epoch [{epoch+1}/{num_epochs}] "
+              f"Train Loss: {avg_train_loss:.4f}, Train Acc: {train_acc:.4f} | "
+              f"Val Loss: {avg_val_loss:.4f}, Val Acc: {val_acc:.4f}")
+        writer.add_scalar('Loss/train', avg_train_loss, epoch)
+        writer.add_scalar('Loss/val', avg_val_loss, epoch)
+        writer.add_scalar('Accuracy/train', train_acc, epoch)
+        writer.add_scalar('Accuracy/val', val_acc, epoch)
+
         # --- Early Stopping Check ---
         if epochs_without_improvement >= patience:
             print(f"Early stopping triggered after {epoch+1} epochs!")
             break
 
-        # --- Log ---
-        print(f"Epoch [{epoch+1}/{num_epochs}] "
-              f"Train Loss: {avg_train_loss:.4f}, Train Acc: {train_acc:.4f} | "
-              f"Val Loss: {avg_val_loss:.4f}, Val Acc: {val_acc:.4f}")
+    writer.close()
