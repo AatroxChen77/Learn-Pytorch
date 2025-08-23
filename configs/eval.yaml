@@ -1,0 +1,11 @@
+# 模型评估配置
+
+model:
+  num_classes: 2    # 类别数量
+
+data:
+  test_batch_size: 32  # 测试批次大小
+
+visualization:
+  plot_examples: true  # 是否可视化预测示例
+  num_examples: 12     # 可视化示例数量
