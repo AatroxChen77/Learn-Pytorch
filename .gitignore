@@ -54,7 +54,7 @@ Thumbs.db
 
 # Logs
 *.log
-logs/
+experiments/
 
 # Model checkpoints and weights
 *.pth

@@ -1,2 +1,2 @@
 conda activate learn-pytorch
-tensorboard --logdir notebook/runs/exp-20250823-011524
+tensorboard --logdir experiments/runs/exp-20250823-011524
