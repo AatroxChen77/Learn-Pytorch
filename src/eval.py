@@ -7,6 +7,22 @@ import torch.nn as nn
 from model import AntBeeClassifier
 from dataset import ClassDirectoryDataset
 
+def get_args():
+    # Stage 1: read config path via shared helper
+    base_parser, known_args = parse_base_config_arg("configs/eval.yaml")
+    yaml_defaults = load_yaml_defaults(known_args.config)
+
+    # Stage 2: full parser with YAML-provided defaults
+    parser = argparse.ArgumentParser(description="Evaluation script for AntBeeClassifier", parents=[base_parser])
+    parser.add_argument("-dp", "--data_path", type=str, default=yaml_defaults.get("data_path", "data/hymenoptera_data/val"), help="validation dataset path", metavar="")
+    parser.add_argument("-bs", "--batch_size", type=int, default=yaml_defaults.get("batch_size", 16), help="batch size", metavar="")
+    parser.add_argument("-nw", "--num_workers", type=int, default=yaml_defaults.get("num_workers", 0), help="dataloader num_workers", metavar="")
+    parser.add_argument("-ckpt", "--checkpoint", type=str, default=yaml_defaults.get("checkpoint", ""), help="path to model checkpoint (.pth)", metavar="")
+    default_use_gpu = bool(yaml_defaults.get("use_gpu", False))
+    parser.add_argument("--use_gpu", action="store_true", default=default_use_gpu, help="use GPU if available")
+
+    return parser.parse_args()
+
 def evaluate(model, dataloader, criterion, device="cuda"):
     """
     对给定模型和数据集进行评估
@@ -33,24 +49,6 @@ def evaluate(model, dataloader, criterion, device="cuda"):
     # avg_loss = total_loss / total
     accuracy = correct / total
     return total_loss, accuracy
-
-
-def get_args():
-    # Stage 1: read config path via shared helper
-    base_parser, known_args = parse_base_config_arg("configs/eval.yaml")
-    yaml_defaults = load_yaml_defaults(known_args.config)
-
-    # Stage 2: full parser with YAML-provided defaults
-    parser = argparse.ArgumentParser(description="Evaluation script for AntBeeClassifier", parents=[base_parser])
-    parser.add_argument("-dp", "--data_path", type=str, default=yaml_defaults.get("data_path", "data/hymenoptera_data/val"), help="validation dataset path", metavar="")
-    parser.add_argument("-bs", "--batch_size", type=int, default=yaml_defaults.get("batch_size", 16), help="batch size", metavar="")
-    parser.add_argument("-nw", "--num_workers", type=int, default=yaml_defaults.get("num_workers", 0), help="dataloader num_workers", metavar="")
-    parser.add_argument("-ckpt", "--checkpoint", type=str, default=yaml_defaults.get("checkpoint", ""), help="path to model checkpoint (.pth)", metavar="")
-    default_use_gpu = bool(yaml_defaults.get("use_gpu", False))
-    parser.add_argument("--use_gpu", action="store_true", default=default_use_gpu, help="use GPU if available")
-
-    return parser.parse_args()
-
 
 def main():
     args = get_args()
