@@ -1,4 +1,5 @@
 import torch
+import argparse
 
 from model import AntBeeClassifier
 from dataset import ClassDirectoryDataset
@@ -16,65 +17,92 @@ from datetime import datetime
 
 from torch.utils.tensorboard import SummaryWriter
 
-# ==== Training Configuration ====
-current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
-experiment_name = f"exp-{current_time}"
 
-checkpoints_dir = f"experiments/checkpoints/{experiment_name}"
-os.makedirs(checkpoints_dir, exist_ok=True)
+def get_args():
+    parser = argparse.ArgumentParser(description="Training script for AntBeeClassifier")
+    # Basic training params
+    parser.add_argument("-lr", "--learning_rate", type=float, default=0.01, help="learning rate", metavar="")
+    parser.add_argument("-bs", "--batch_size", type=int, default=16, help="batch size", metavar="")
+    parser.add_argument("-e", "--epochs", type=int, default=1000, help="number of epochs", metavar="")
+    parser.add_argument("-nw", "--num_workers", type=int, default=0, help="dataloader num_workers", metavar="")
 
-writer = SummaryWriter(f"experiments/runs/{experiment_name}")
+    # Data and save paths
+    parser.add_argument("-dp", "--data_path", type=str, default="data/hymenoptera_data/train", help="training dataset path", metavar="")
+    parser.add_argument("-sd", "--save_dir", type=str, default="experiments/checkpoints", help="checkpoints base directory", metavar="")
+    parser.add_argument("-rd", "--runs_dir", type=str, default="experiments/runs", help="tensorboard runs base directory", metavar="")
 
-# ==== Parameter Settings ====
-num_epochs = 1000
-batch_size = 16
-num_workers = 0
-learning_rate = 0.01
+    # Early stopping/scheduler knobs
+    parser.add_argument("--patience", type=int, default=200, help="early stopping patience", metavar="")
 
-patience = 200
-best_val_loss = np.inf
-epochs_without_improvement = 0 # Record how many epochs val_loss hasn't decreased
+    # Device
+    parser.add_argument("--use_gpu", action="store_true", help="use GPU if available")
 
-# ==== Device Selection ====
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return parser.parse_args()
 
-# ==== Create dataset and dataloader ====
-dataset = ClassDirectoryDataset("data/hymenoptera_data/train", ["jpg"])
-train_size = int(0.8 * len(dataset))
-val_size = len(dataset) - train_size
-train_set, val_set = random_split(dataset, [train_size, val_size],
-                                  generator=torch.Generator().manual_seed(42)
-)
+def main():
+    args = get_args()
 
-train_loader = DataLoader(train_set,
-                          batch_size=batch_size,
-                          num_workers=num_workers,
-                          shuffle=True,
-                          pin_memory=True  # Enable this option to accelerate data transfer if using GPU
-)
-val_loader = DataLoader(val_set,
-                        batch_size=batch_size,
-                        num_workers=num_workers,
-                        shuffle=True,
-                        pin_memory=True
-)
+    # ==== Training Configuration ====
+    current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+    experiment_name = f"exp-{current_time}"
 
-# ==== Model Instance ====
-model = AntBeeClassifier(dropout_rate=0.2).to(device) # 1. build a model
-# ==== Loss Function & Optimizer ====
-criterion = torch.nn.CrossEntropyLoss(reduction="sum") # 2. define the loss
-optimizer = Adam(model.parameters(), lr=learning_rate , weight_decay=1e-4) # 3. do the optimize work, add weight decay to prevent overfitting
-scheduler = ReduceLROnPlateau(optimizer)
-scaler = GradScaler()  # Used to scale loss to prevent underflow
+    checkpoints_dir = os.path.join(args.save_dir, experiment_name)
+    os.makedirs(checkpoints_dir, exist_ok=True)
 
-if __name__ == '__main__':
+    writer = SummaryWriter(os.path.join(args.runs_dir, experiment_name))
+
+    # ==== Parameter Settings ====
+    num_epochs = args.epochs
+    batch_size = args.batch_size
+    num_workers = args.num_workers
+    learning_rate = args.learning_rate
+
+    patience = args.patience
+    best_val_loss = np.inf # Initialize best validation loss to infinity
+    epochs_without_improvement = 0 # Record how many epochs val_loss hasn't decreased
+
+    # ==== Device Selection ====
+    if args.use_gpu and torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+
     print(f"Using device: {device}")
-    
+
+    # ==== Create dataset and dataloader ====
+    dataset = ClassDirectoryDataset(args.data_path, ["jpg"])
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_set, val_set = random_split(dataset, [train_size, val_size],
+                                      generator=torch.Generator().manual_seed(42)
+    )
+
+    train_loader = DataLoader(train_set,
+                              batch_size=batch_size,
+                              num_workers=num_workers,
+                              shuffle=True,
+                              pin_memory=True  # Enable this option to accelerate data transfer if using GPU
+    )
+    val_loader = DataLoader(val_set,
+                            batch_size=batch_size,
+                            num_workers=num_workers,
+                            shuffle=True,
+                            pin_memory=True
+    )
+
+    # ==== Model Instance ====
+    model = AntBeeClassifier(dropout_rate=0.2).to(device) # 1. build a model
+    # ==== Loss Function & Optimizer ====
+    criterion = torch.nn.CrossEntropyLoss(reduction="sum") # 2. define the loss
+    optimizer = Adam(model.parameters(), lr=learning_rate , weight_decay=1e-4) # 3. do the optimize work, add weight decay to prevent overfitting
+    scheduler = ReduceLROnPlateau(optimizer)
+    scaler = GradScaler()  # Used to scale loss to prevent underflow
+
     if is_autocast_available(str(device)):
         print("Autocast available")
     else:
         print("Autocast not available")
-    
+
     # ==== Training + Validation loop ====
     for epoch in range(num_epochs):
         # --- Training ---
@@ -169,3 +197,6 @@ if __name__ == '__main__':
             break
 
     writer.close()
+
+if __name__ == "__main__":
+    main()

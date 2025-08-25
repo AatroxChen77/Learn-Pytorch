@@ -1,4 +1,5 @@
 import torch
+import argparse
 from torch.utils.data import DataLoader
 import torch.nn as nn
 from model import AntBeeClassifier
@@ -32,18 +33,34 @@ def evaluate(model, dataloader, criterion, device="cuda"):
     return total_loss, accuracy
 
 
+def get_args():
+    parser = argparse.ArgumentParser(description="Evaluation script for AntBeeClassifier")
+    parser.add_argument("-dp", "--data_path", type=str, default="data/hymenoptera_data/val", help="validation dataset path", metavar="")
+    parser.add_argument("-bs", "--batch_size", type=int, default=16, help="batch size", metavar="")
+    parser.add_argument("-nw", "--num_workers", type=int, default=0, help="dataloader num_workers", metavar="")
+    parser.add_argument("-ckpt", "--checkpoint", type=str, default="", help="path to model checkpoint (.pth)", metavar="")
+    parser.add_argument("--use_gpu", action="store_true", help="use GPU if available")
+
+    return parser.parse_args()
+
+
 def main():
+    args = get_args()
     # ==== Device Selection ====
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.use_gpu and torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
     print(f"Using device: {device}")
 
     # ==== Create dataset and dataloader ====
-    val_dataset = ClassDirectoryDataset("data/hymenoptera_data/val", ["jpg"],is_train=False)  # 自定义 Dataset
-    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False,num_workers=0)
+    val_dataset = ClassDirectoryDataset(args.data_path, ["jpg"],is_train=False)  # 自定义 Dataset
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,num_workers=args.num_workers)
 
     # ==== Model Instance ====
     model = AntBeeClassifier(num_classes=2).to(device)
-    checkpoint = torch.load("experiments/checkpoints/exp-20250823-020050/best_model.pth", map_location=device,weights_only=True)
+    
+    checkpoint = torch.load(args.checkpoint, map_location=device,weights_only=True)
     model.load_state_dict(checkpoint["model_state_dict"])
     # ==== Loss Function & Optimizer ====
     criterion = nn.CrossEntropyLoss(reduction="sum")
