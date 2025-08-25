@@ -1,11 +1,10 @@
-# 模型评估配置
+# Default evaluation arguments for eval.py
+# Dataset
+data_path: data/hymenoptera_data/val
+batch_size: 16
+num_workers: 0
 
-model:
-  num_classes: 2    # 类别数量
-
-data:
-  test_batch_size: 32  # 测试批次大小
-
-visualization:
-  plot_examples: true  # 是否可视化预测示例
-  num_examples: 12     # 可视化示例数量
+# Checkpoint
+checkpoint: "experiments/checkpoints/exp-20250823-020050/best_model.pth"
+# Device
+use_gpu: true

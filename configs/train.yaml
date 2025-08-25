@@ -1,0 +1,16 @@
+# Default training arguments for train.py
+learning_rate: 0.01
+batch_size: 16
+epochs: 1000
+num_workers: 0
+
+# Paths
+data_path: data/hymenoptera_data/train
+save_dir: experiments/checkpoints
+runs_dir: experiments/runs
+
+# Early stopping / scheduler
+patience: 200
+
+# Device
+use_gpu: true

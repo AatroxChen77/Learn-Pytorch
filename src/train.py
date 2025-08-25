@@ -1,5 +1,7 @@
 import torch
 import argparse
+import yaml
+from utils import parse_base_config_arg, load_yaml_defaults
 
 from model import AntBeeClassifier
 from dataset import ClassDirectoryDataset
@@ -19,23 +21,29 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Training script for AntBeeClassifier")
+    # Stage 1: read config path via shared helper
+    base_parser, known_args = parse_base_config_arg("configs/train.yaml")
+    yaml_defaults = load_yaml_defaults(known_args.config)
+
+    # Stage 2: full parser with YAML-provided defaults
+    parser = argparse.ArgumentParser(description="Training script for AntBeeClassifier", parents=[base_parser])
     # Basic training params
-    parser.add_argument("-lr", "--learning_rate", type=float, default=0.01, help="learning rate", metavar="")
-    parser.add_argument("-bs", "--batch_size", type=int, default=16, help="batch size", metavar="")
-    parser.add_argument("-e", "--epochs", type=int, default=1000, help="number of epochs", metavar="")
-    parser.add_argument("-nw", "--num_workers", type=int, default=0, help="dataloader num_workers", metavar="")
+    parser.add_argument("-lr", "--learning_rate", type=float, default=yaml_defaults.get("learning_rate", 0.01), help="learning rate", metavar="")
+    parser.add_argument("-bs", "--batch_size", type=int, default=yaml_defaults.get("batch_size", 16), help="batch size", metavar="")
+    parser.add_argument("-e", "--epochs", type=int, default=yaml_defaults.get("epochs", 1000), help="number of epochs", metavar="")
+    parser.add_argument("-nw", "--num_workers", type=int, default=yaml_defaults.get("num_workers", 0), help="dataloader num_workers", metavar="")
 
     # Data and save paths
-    parser.add_argument("-dp", "--data_path", type=str, default="data/hymenoptera_data/train", help="training dataset path", metavar="")
-    parser.add_argument("-sd", "--save_dir", type=str, default="experiments/checkpoints", help="checkpoints base directory", metavar="")
-    parser.add_argument("-rd", "--runs_dir", type=str, default="experiments/runs", help="tensorboard runs base directory", metavar="")
+    parser.add_argument("-dp", "--data_path", type=str, default=yaml_defaults.get("data_path", "data/hymenoptera_data/train"), help="training dataset path", metavar="")
+    parser.add_argument("-sd", "--save_dir", type=str, default=yaml_defaults.get("save_dir", "experiments/checkpoints"), help="checkpoints base directory", metavar="")
+    parser.add_argument("-rd", "--runs_dir", type=str, default=yaml_defaults.get("runs_dir", "experiments/runs"), help="tensorboard runs base directory", metavar="")
 
     # Early stopping/scheduler knobs
-    parser.add_argument("--patience", type=int, default=200, help="early stopping patience", metavar="")
+    parser.add_argument("--patience", type=int, default=yaml_defaults.get("patience", 200), help="early stopping patience", metavar="")
 
     # Device
-    parser.add_argument("--use_gpu", action="store_true", help="use GPU if available")
+    default_use_gpu = bool(yaml_defaults.get("use_gpu", True))
+    parser.add_argument("--use_gpu", action="store_true", default=default_use_gpu, help="use GPU if available")
 
     return parser.parse_args()
 
